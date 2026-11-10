@@ -87,21 +87,37 @@ def require_firebase_user(request: Request) -> str:
     if not authorization.lower().startswith("bearer "):
         raise HTTPException(401, "Sign in with Firebase Authentication to continue.")
     token = authorization.split(" ", 1)[1].strip()
+    project_id = os.getenv("FIREBASE_PROJECT_ID")
+    if not project_id:
+        raise HTTPException(503, "Firebase Authentication is not configured on the backend.")
     try:
-        import firebase_admin
-        from firebase_admin import auth as firebase_auth, credentials
-        if not firebase_admin._apps:
-            service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-            if service_account_json:
+        service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        if service_account_json:
+            # When Admin credentials are configured, also check disabled users
+            # and revoked refresh tokens.
+            import firebase_admin
+            from firebase_admin import auth as firebase_auth, credentials
+            if not firebase_admin._apps:
                 service_account = json.loads(service_account_json)
                 credential = credentials.Certificate(service_account)
-                firebase_admin.initialize_app(credential, {"projectId": os.getenv("FIREBASE_PROJECT_ID") or service_account.get("project_id")})
-            else:
-                firebase_admin.initialize_app(options={"projectId": os.getenv("FIREBASE_PROJECT_ID")})
-        decoded = firebase_auth.verify_id_token(token, check_revoked=True)
-        return str(decoded["uid"])
-    except Exception:
-        raise HTTPException(401, "Firebase sign-in could not be verified. Check backend Firebase credentials and sign in again.")
+                firebase_admin.initialize_app(credential, {"projectId": project_id})
+            decoded = firebase_auth.verify_id_token(token, check_revoked=True)
+        else:
+            # Signature and standard token claims can be verified with Google's
+            # rotating public keys; no private service-account key is needed.
+            from google.auth.transport.requests import Request as GoogleAuthRequest
+            from google.oauth2 import id_token as google_id_token
+            decoded = google_id_token.verify_firebase_token(
+                token, GoogleAuthRequest(), audience=project_id
+            )
+            if decoded.get("iss") != f"https://securetoken.google.com/{project_id}":
+                raise ValueError("Firebase token issuer does not match the configured project.")
+        uid = decoded.get("uid") or decoded.get("sub")
+        if not uid:
+            raise ValueError("Firebase token has no user ID.")
+        return str(uid)
+    except Exception as error:
+        raise HTTPException(401, "Firebase sign-in could not be verified. Sign in again.") from error
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20000)

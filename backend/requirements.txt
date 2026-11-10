@@ -8,4 +8,5 @@ httpx>=0.27
 beautifulsoup4>=4.12
 DDGS>=9
 firebase-admin>=6.5,<8
+google-auth>=2,<3
 python-dotenv>=1,<2
