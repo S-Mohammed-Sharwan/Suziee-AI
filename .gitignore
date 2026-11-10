@@ -1,0 +1,24 @@
+# Local environment and credentials
+**/.env
+!**/.env.example
+**/*service-account*.json
+**/serviceAccountKey.json
+**/.firebase/
+**/.vercel/
+
+# Generated dependencies and builds
+**/node_modules/
+**/.venv/
+**/dist/
+**/__pycache__/
+**/*.py[cod]
+
+# Local uploaded files
+backend/uploads/
+backend/data/chats.json
+backend/data/documents.json
+backend/data/tasks.json
+
+# Local Firebase CLI logs
+**/firebase-debug.log
+**/ui-debug.log
